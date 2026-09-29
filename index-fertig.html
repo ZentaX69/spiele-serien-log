@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spiele-Log</title>
+<style>
+:root{--bg:#131421;--pn:#1c1e2e;--ln:#2c2f45;--tx:#ece9f5;--mu:#9a97b3;--ac:#9db4ff;--st:#ffbf47}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:18px 20px}
+h1{margin:0;font:700 28px Georgia,"Times New Roman",serif}
+button,input,select,textarea{font:inherit;color:inherit;background:var(--pn);border:1px solid var(--ln);border-radius:8px;padding:8px 12px}
+button{cursor:pointer}
+button:hover{border-color:var(--ac)}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.pri{background:var(--ac);border-color:var(--ac);color:#131421;font-weight:600}
+.bar{display:flex;flex-wrap:wrap;gap:8px;padding:0 20px 16px}
+.bar input{flex:1 1 200px}
+#warn{display:none;background:#5a2a3a;padding:10px 20px}
+main{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:22px 16px;padding:0 20px 48px}
+.g{cursor:pointer}
+.cov{position:relative;aspect-ratio:3/4;border-radius:6px;background:var(--pn);display:grid;place-items:center;font-size:40px;overflow:hidden}
+.cov img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.badge{position:absolute;left:8px;bottom:8px;background:#131421e6;color:var(--st);font:700 22px Georgia,serif;padding:0 10px;border-radius:6px}
+.g h3{margin:8px 0 2px;font-size:15px}
+.mu{color:var(--mu);font-size:13px}
+.avg{color:var(--st);font-weight:600}
+dialog{background:var(--bg);color:var(--tx);border:1px solid var(--ln);border-radius:12px;width:min(520px,94vw);padding:22px}
+dialog::backdrop{background:#000a}
+form{display:grid;gap:10px}
+h2{margin:0 0 4px;font:700 22px Georgia,serif}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.rt{border-top:1px solid var(--ln);padding:8px 0}
+.stars button{border:0;background:none;padding:0 1px;font-size:26px;color:#3a3e58}
+.stars button.on{color:var(--st)}
+textarea{width:100%}
+</style>
+</head>
+<body>
+<div id="warn">Trage zuerst deine Firebase-Konfiguration in index.html ein (siehe ANLEITUNG.md).</div>
+<header>
+  <h1>Spiele-Log</h1>
+  <div class="row" style="margin:0;align-items:center">
+    <button id="new" class="pri" style="display:none">Spiel eintragen</button>
+    <span id="me"></span>
+  </div>
+</header>
+<div class="bar">
+  <input id="q" type="search" placeholder="Spiel, Genre oder Plattform suchen">
+  <select id="fs"><option value="">Alle Status</option><option>gespielt</option><option>spiele ich</option><option>Wunschliste</option></select>
+  <select id="fg"></select>
+  <select id="fp"></select>
+  <select id="so"><option value="rating">Beste Bewertung</option><option value="title">Titel A–Z</option><option value="new">Neueste zuerst</option></select>
+</div>
+<main id="grid"></main>
+
+<dialog id="det"><div id="dc"></div></dialog>
+
+<dialog id="add">
+  <form id="af">
+    <h2>Spiel eintragen</h2>
+    <input name="title" placeholder="Titel" required maxlength="80">
+    <input name="platform" placeholder="Plattform (PC, PS5, Switch …)" required maxlength="30">
+    <input name="genre" placeholder="Genre (z. B. Simulation)" required maxlength="30">
+    <select name="status"><option>gespielt</option><option>spiele ich</option><option>Wunschliste</option></select>
+    <input name="hours" type="number" min="0" step="0.5" placeholder="Spielzeit in Stunden">
+    <input name="cover" type="url" placeholder="Cover-URL (optional)">
+    <div class="row"><button class="pri">Speichern</button><button type="button" id="ac">Abbrechen</button></div>
+  </form>
+</dialog>
+
+<dialog id="lg">
+  <form id="lf">
+    <h2>Anmelden</h2>
+    <input id="em" type="email" placeholder="E-Mail" required>
+    <input id="pw" type="password" placeholder="Passwort (mind. 6 Zeichen)" required minlength="6">
+    <div class="row"><button class="pri">Anmelden</button><button type="button" id="rg">Neu registrieren</button></div>
+    <button type="button" id="go">Mit Google anmelden</button>
+    <button type="button" id="lc">Abbrechen</button>
+  </form>
+</dialog>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getAuth,onAuthStateChanged,signOut,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {getFirestore,collection,doc,addDoc,setDoc,deleteDoc,onSnapshot,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+// >>> HIER deine Firebase-Konfiguration einfügen (Anleitung Schritt 2) <<<
+const firebaseConfig={apiKey:"AIzaSyCVWnMVYeR7byiuKqWUc5ByRTwuRS2kcz8",authDomain:"spiele-serien-log.firebaseapp.com",projectId:"spiele-serien-log",appId:"1:511775992677:web:f6e16f38e0f6a6a89a0f8c"};
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+if(firebaseConfig.apiKey.startsWith("DEIN"))$("#warn").style.display="block";
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+let user=null,games=[],ratings=[],cur=null,pick=0;
+const name=()=>user.displayName||user.email.split("@")[0];
+const rOf=id=>ratings.filter(r=>r.gameId===id);
+const avg=id=>{const r=rOf(id);return r.length?r.reduce((a,b)=>a+b.stars,0)/r.length:0};
+const fail=e=>{$("#warn").textContent="Fehler: "+(e.code||e.message);$("#warn").style.display="block"};
+
+onSnapshot(collection(db,"games"),s=>{games=s.docs.map(d=>({id:d.id,...d.data()}));render()},fail);
+onSnapshot(collection(db,"ratings"),s=>{ratings=s.docs.map(d=>d.data());render();if($("#det").open&&cur)updRl()},fail);
+
+function fill(sel,vals,all){const e=$(sel),v=e.value;e.innerHTML=`<option value="">${all}</option>`+[...new Set(vals)].filter(Boolean).sort().map(x=>`<option${x===v?" selected":""}>${esc(x)}</option>`).join("")}
+
+function render(){
+  fill("#fg",games.map(g=>g.genre),"Alle Genres");fill("#fp",games.map(g=>g.platform),"Alle Plattformen");
+  const q=$("#q").value.toLowerCase(),st=$("#fs").value,ge=$("#fg").value,pl=$("#fp").value,so=$("#so").value;
+  const l=games.filter(g=>(!q||(g.title+" "+g.genre+" "+g.platform).toLowerCase().includes(q))&&(!st||g.status===st)&&(!ge||g.genre===ge)&&(!pl||g.platform===pl));
+  l.sort({rating:(a,b)=>avg(b.id)-avg(a.id),title:(a,b)=>a.title.localeCompare(b.title),new:(a,b)=>(b.createdAt?.seconds||9e9)-(a.createdAt?.seconds||9e9)}[so]);
+  $("#grid").innerHTML=l.map(g=>{const n=rOf(g.id).length;
+    return `<div class="g" data-id="${g.id}"><div class="cov">🎮${g.cover?`<img src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.remove()">`:""}${n?`<span class="badge">${avg(g.id).toFixed(1)}</span>`:""}</div><h3>${esc(g.title)}</h3><div class="mu">${esc(g.platform)} · ${esc(g.genre)}<br>${esc(g.status)}${g.hours?" · "+esc(g.hours)+" h":""}${n?` · ${n}× bewertet`:""}</div></div>`}).join("")||`<p class="mu">Noch keine Spiele. Melde dich an und trag das erste ein.</p>`;
+}
+["#q","#fs","#fg","#fp","#so"].forEach(s=>$(s).oninput=render);
+$("#grid").onclick=e=>{const c=e.target.closest(".g");if(c)showDet(c.dataset.id)};
+
+function updRl(){const r=rOf(cur.id);
+  $("#rl").innerHTML=r.length?`<p><span class="avg">★ ${avg(cur.id).toFixed(1)} / 10</span> <span class="mu">aus ${r.length} Bewertung${r.length>1?"en":""}</span></p>`+r.map(x=>`<div class="rt"><b>${esc(x.name)}</b> <span class="avg">${x.stars}/10</span><br><span class="mu">${esc(x.comment)}</span></div>`).join(""):`<p class="mu">Noch keine Bewertungen.</p>`}
+function stars(){$("#st").innerHTML=Array.from({length:10},(_,i)=>`<button type="button" data-v="${i+1}" aria-label="${i+1} von 10" class="${i<pick?"on":""}">★</button>`).join("")+`<span class="mu"> ${pick||"–"}/10</span>`}
+
+function showDet(id){
+  cur=games.find(g=>g.id===id);if(!cur)return;
+  const mine=rOf(id).find(r=>r.uid===user?.uid);pick=mine?.stars||0;
+  $("#dc").innerHTML=`<h2>${esc(cur.title)}</h2><p class="mu">${esc(cur.platform)} · ${esc(cur.genre)} · ${esc(cur.status)}${cur.hours?" · "+esc(cur.hours)+" h":""} · eingetragen von ${esc(cur.addedByName)}</p><div id="rl"></div>`+
+  (user?`<h4>Deine Bewertung</h4><div class="stars" id="st"></div><textarea id="cm" rows="2" maxlength="300" placeholder="Kurzer Kommentar">${esc(mine?.comment)}</textarea><div class="row"><button class="pri" id="sv">Bewertung speichern</button>${cur.addedBy===user.uid?`<button id="dl">Spiel löschen</button>`:""}<button id="cl">Schließen</button></div>`
+  :`<p class="mu">Zum Bewerten bitte anmelden.</p><button id="cl">Schließen</button>`);
+  updRl();$("#cl").onclick=()=>$("#det").close();
+  if(user){stars();
+    $("#st").onclick=e=>{const b=e.target.closest("button");if(b){pick=+b.dataset.v;stars()}};
+    $("#sv").onclick=()=>{if(!pick)return alert("Bitte 1–10 Sterne wählen.");
+      setDoc(doc(db,"ratings",id+"_"+user.uid),{gameId:id,uid:user.uid,name:name(),stars:pick,comment:$("#cm").value.trim(),updatedAt:serverTimestamp()}).catch(fail)};
+    const d=$("#dl");if(d)d.onclick=async()=>{if(confirm("Spiel wirklich löschen?")){await deleteDoc(doc(db,"games",id)).catch(fail);$("#det").close()}};
+  }
+  if(!$("#det").open)$("#det").showModal();
+}
+
+$("#new").onclick=()=>$("#add").showModal();
+$("#ac").onclick=()=>$("#add").close();
+$("#af").onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+  addDoc(collection(db,"games"),{...f,title:f.title.trim(),hours:f.hours?+f.hours:0,addedBy:user.uid,addedByName:name(),createdAt:serverTimestamp()})
+   .then(()=>{e.target.reset();$("#add").close()}).catch(fail)};
+
+const ok=()=>$("#lg").close(),err=e=>alert((e.code||e.message).replace("auth/",""));
+$("#lc").onclick=ok;
+$("#lf").onsubmit=e=>{e.preventDefault();signInWithEmailAndPassword(auth,$("#em").value,$("#pw").value).then(ok).catch(err)};
+$("#rg").onclick=()=>{if($("#lf").reportValidity())createUserWithEmailAndPassword(auth,$("#em").value,$("#pw").value).then(ok).catch(err)};
+$("#go").onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()).then(ok).catch(err);
+$("#me").onclick=e=>{if(e.target.id==="lo")signOut(auth);if(e.target.id==="li")$("#lg").showModal()};
+onAuthStateChanged(auth,u=>{user=u;
+  $("#me").innerHTML=u?`<span class="mu">${esc(name())}</span> <button id="lo">Abmelden</button>`:`<button id="li" class="pri">Anmelden</button>`;
+  $("#new").style.display=u?"":"none";
+  if($("#det").open)$("#det").close();
+});
+</script>
+</body>
+</html>
