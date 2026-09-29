@@ -21,7 +21,8 @@ button:hover{border-color:var(--ac)}
 main{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:22px 16px;padding:0 20px 48px}
 .g{cursor:pointer}
 .cov{position:relative;aspect-ratio:3/4;border-radius:6px;background:var(--pn);display:grid;place-items:center;font-size:40px;overflow:hidden}
-.cov img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cov img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.cov img.bg{object-fit:cover;filter:blur(16px) brightness(.55);transform:scale(1.15)}
 .badge{position:absolute;left:8px;bottom:8px;background:#131421e6;color:var(--st);font:700 22px Georgia,serif;padding:0 10px;border-radius:6px}
 .g h3{margin:8px 0 2px;font-size:15px}
 .mu{color:var(--mu);font-size:13px}
@@ -35,6 +36,10 @@ h2{margin:0 0 4px;font:700 22px Georgia,serif}
 .stars button{border:0;background:none;padding:0 1px;font-size:26px;color:#3a3e58}
 .stars button.on{color:var(--st)}
 textarea{width:100%}
+.sl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sl input{flex:1 1 200px}
+#ss{min-height:1.4em}
+#pv img{display:block;max-height:140px;max-width:100%;border-radius:6px}
 </style>
 </head>
 <body>
@@ -59,14 +64,20 @@ textarea{width:100%}
 
 <dialog id="add">
   <form id="af">
-    <h2>Spiel eintragen</h2>
+    <h2 id="ah">Spiel eintragen</h2>
+    <div class="sl">
+      <input name="steam" placeholder="Steam-Link oder AppID (optional)">
+      <button type="button" id="sc">Von Steam laden</button>
+    </div>
+    <div id="ss" class="mu"></div>
     <input name="title" placeholder="Titel" required maxlength="80">
     <input name="platform" placeholder="Plattform (PC, PS5, Switch …)" required maxlength="30">
     <input name="genre" placeholder="Genre (z. B. Simulation)" required maxlength="30">
     <select name="status"><option>gespielt</option><option>spiele ich</option><option>Wunschliste</option></select>
     <input name="hours" type="number" min="0" step="0.5" placeholder="Spielzeit in Stunden">
-    <input name="cover" type="url" placeholder="Cover-URL (optional)">
-    <div class="row"><button class="pri">Speichern</button><button type="button" id="ac">Abbrechen</button></div>
+    <input name="cover" type="url" placeholder="Cover-URL (optional, wird von Steam befüllt)">
+    <div id="pv"></div>
+    <div class="row"><button class="pri" id="asv">Speichern</button><button type="button" id="ac">Abbrechen</button></div>
   </form>
 </dialog>
 
@@ -84,7 +95,7 @@ textarea{width:100%}
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {getAuth,onAuthStateChanged,signOut,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import {getFirestore,collection,doc,addDoc,setDoc,deleteDoc,onSnapshot,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import {getFirestore,collection,doc,addDoc,setDoc,updateDoc,deleteDoc,onSnapshot,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 // >>> HIER deine Firebase-Konfiguration einfügen (Anleitung Schritt 2) <<<
 const firebaseConfig={apiKey:"AIzaSyCVWnMVYeR7byiuKqWUc5ByRTwuRS2kcz8",authDomain:"spiele-serien-log.firebaseapp.com",projectId:"spiele-serien-log",appId:"1:511775992677:web:f6e16f38e0f6a6a89a0f8c"};
@@ -110,7 +121,7 @@ function render(){
   const l=games.filter(g=>(!q||(g.title+" "+g.genre+" "+g.platform).toLowerCase().includes(q))&&(!st||g.status===st)&&(!ge||g.genre===ge)&&(!pl||g.platform===pl));
   l.sort({rating:(a,b)=>avg(b.id)-avg(a.id),title:(a,b)=>a.title.localeCompare(b.title),new:(a,b)=>(b.createdAt?.seconds||9e9)-(a.createdAt?.seconds||9e9)}[so]);
   $("#grid").innerHTML=l.map(g=>{const n=rOf(g.id).length;
-    return `<div class="g" data-id="${g.id}"><div class="cov">🎮${g.cover?`<img src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.remove()">`:""}${n?`<span class="badge">${avg(g.id).toFixed(1)}</span>`:""}</div><h3>${esc(g.title)}</h3><div class="mu">${esc(g.platform)} · ${esc(g.genre)}<br>${esc(g.status)}${g.hours?" · "+esc(g.hours)+" h":""}${n?` · ${n}× bewertet`:""}</div></div>`}).join("")||`<p class="mu">Noch keine Spiele. Melde dich an und trag das erste ein.</p>`;
+    return `<div class="g" data-id="${g.id}"><div class="cov">🎮${g.cover?`<img class="bg" src="${esc(g.cover)}" alt="" loading="lazy" onerror="this.parentNode.querySelectorAll('img').forEach(i=>i.remove())"><img src="${esc(g.cover)}" alt="" loading="lazy">`:""}${n?`<span class="badge">${avg(g.id).toFixed(1)}</span>`:""}</div><h3>${esc(g.title)}</h3><div class="mu">${esc(g.platform)} · ${esc(g.genre)}<br>${esc(g.status)}${g.hours?" · "+esc(g.hours)+" h":""}${n?` · ${n}× bewertet`:""}</div></div>`}).join("")||`<p class="mu">Noch keine Spiele. Melde dich an und trag das erste ein.</p>`;
 }
 ["#q","#fs","#fg","#fp","#so"].forEach(s=>$(s).oninput=render);
 $("#grid").onclick=e=>{const c=e.target.closest(".g");if(c)showDet(c.dataset.id)};
@@ -123,23 +134,98 @@ function showDet(id){
   cur=games.find(g=>g.id===id);if(!cur)return;
   const mine=rOf(id).find(r=>r.uid===user?.uid);pick=mine?.stars||0;
   $("#dc").innerHTML=`<h2>${esc(cur.title)}</h2><p class="mu">${esc(cur.platform)} · ${esc(cur.genre)} · ${esc(cur.status)}${cur.hours?" · "+esc(cur.hours)+" h":""} · eingetragen von ${esc(cur.addedByName)}</p><div id="rl"></div>`+
-  (user?`<h4>Deine Bewertung</h4><div class="stars" id="st"></div><textarea id="cm" rows="2" maxlength="300" placeholder="Kurzer Kommentar">${esc(mine?.comment)}</textarea><div class="row"><button class="pri" id="sv">Bewertung speichern</button>${cur.addedBy===user.uid?`<button id="dl">Spiel löschen</button>`:""}<button id="cl">Schließen</button></div>`
+  (user?`<h4>Deine Bewertung</h4><div class="stars" id="st"></div><textarea id="cm" rows="2" maxlength="300" placeholder="Kurzer Kommentar">${esc(mine?.comment)}</textarea><div class="row"><button class="pri" id="sv">Bewertung speichern</button>${cur.addedBy===user.uid?`<button id="ed">Bearbeiten</button><button id="dl">Spiel löschen</button>`:""}<button id="cl">Schließen</button></div>`
   :`<p class="mu">Zum Bewerten bitte anmelden.</p><button id="cl">Schließen</button>`);
   updRl();$("#cl").onclick=()=>$("#det").close();
   if(user){stars();
     $("#st").onclick=e=>{const b=e.target.closest("button");if(b){pick=+b.dataset.v;stars()}};
     $("#sv").onclick=()=>{if(!pick)return alert("Bitte 1–10 Sterne wählen.");
       setDoc(doc(db,"ratings",id+"_"+user.uid),{gameId:id,uid:user.uid,name:name(),stars:pick,comment:$("#cm").value.trim(),updatedAt:serverTimestamp()}).catch(fail)};
+    const ed=$("#ed");if(ed)ed.onclick=()=>{$("#det").close();openForm(cur)};
     const d=$("#dl");if(d)d.onclick=async()=>{if(confirm("Spiel wirklich löschen?")){await deleteDoc(doc(db,"games",id)).catch(fail);$("#det").close()}};
   }
   if(!$("#det").open)$("#det").showModal();
 }
 
-$("#new").onclick=()=>$("#add").showModal();
+//#region steam
+// Cover von Steam holen: mehrere Wege nacheinander, jedes Bild wird vor dem Speichern auf Ladbarkeit geprüft.
+const STEAM_OK=/^https:\/\/[a-z0-9.-]+\.(steamstatic\.com|akamaihd\.net)\//i;
+const STEAM_ASSETS="https://shared.fastly.steamstatic.com/store_item_assets/";
+const STEAM_HOSTS=["https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/","https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/","https://cdn.cloudflare.steamstatic.com/steam/apps/"];
+// Öffentliche CORS-Proxys als Ersatzweg, weil Steam-APIs im Browser nicht direkt erreichbar sind.
+const PROXIES=[u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u),u=>"https://corsproxy.io/?url="+encodeURIComponent(u)];
+const parseApp=s=>{s=String(s||"").trim();const m=s.match(/\/app\/(\d+)/)||s.match(/^(\d{2,10})$/);return m?m[1]:null};
+const tmo=ms=>{const c=new AbortController();setTimeout(()=>c.abort(),ms);return c.signal};
+const probe=u=>new Promise(res=>{const i=new Image(),t=setTimeout(()=>res(false),7000);i.onload=()=>{clearTimeout(t);res(true)};i.onerror=()=>{clearTimeout(t);res(false)};i.src=u});
+// Fragt direkt und über alle Proxys gleichzeitig, der erste brauchbare Treffer gewinnt.
+const anyJson=(u,ok)=>Promise.any([u,...PROXIES.map(p=>p(u))].map(async x=>{const r=await fetch(x,{signal:tmo(8000)});if(!r.ok)throw 0;const j=await r.json();if(!ok(j))throw 0;return j}));
+async function steamLookup(id){
+  const inp=encodeURIComponent(JSON.stringify({ids:[{appid:+id}],context:{language:"german",country_code:"DE"},data_request:{include_assets:true}}));
+  const [a,b]=await Promise.allSettled([
+    anyJson("https://api.steampowered.com/IStoreBrowseService/GetItems/v1?input_json="+inp,j=>j?.response?.store_items?.[0]?.assets),
+    anyJson("https://store.steampowered.com/api/appdetails?appids="+id+"&l=german",j=>j?.[id]?.success)]);
+  const it=a.value?.response?.store_items?.[0],d=b.value?.[id]?.data;
+  const c=[],add=(u,how)=>{if(u&&STEAM_OK.test(u))c.push([u,how])};
+  const as=it?.assets,fmt=as?.asset_url_format;
+  const fromAsset=k=>as?.[k]&&fmt?STEAM_ASSETS+fmt.replace("${FILENAME}",as[k]):"";
+  add(fromAsset("library_capsule"),"Hochformat");
+  STEAM_HOSTS.forEach(h=>add(h+id+"/library_600x900.jpg","Hochformat"));
+  add(fromAsset("header"),"Titelbild, Querformat");
+  add(d?.header_image,"Titelbild, Querformat");
+  STEAM_HOSTS.forEach(h=>add(h+id+"/header.jpg","Titelbild, Querformat"));
+  const seen=new Set(),list=c.filter(([u])=>!seen.has(u)&&seen.add(u));
+  const ok=await Promise.all(list.map(([u])=>probe(u)));
+  const hit=list.find((_,i)=>ok[i]);
+  return{name:(d?.name||it?.name||"").slice(0,80),cover:hit?hit[0]:"",how:hit?hit[1]:"",api:!!(it||d)};
+}
+//#endregion
+
+let editId=null;
+const F=()=>$("#af").elements;
+const pv=u=>{$("#pv").innerHTML=u?`<img src="${esc(u)}" alt="Vorschau" onerror="this.remove()">`:""};
+function openForm(g){
+  editId=g?g.id:null;
+  $("#af").reset();
+  $("#ah").textContent=g?"Spiel bearbeiten":"Spiel eintragen";
+  $("#asv").textContent=g?"Änderungen speichern":"Speichern";
+  if(g){for(const k of ["title","platform","genre","status","cover"])F()[k].value=g[k]||"";F().steam.value=g.steamId||"";F().hours.value=g.hours||""}
+  $("#ss").textContent="";pv(g?.cover);
+  $("#add").showModal();
+}
+$("#new").onclick=()=>openForm(null);
 $("#ac").onclick=()=>$("#add").close();
-$("#af").onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
-  addDoc(collection(db,"games"),{...f,title:f.title.trim(),hours:f.hours?+f.hours:0,addedBy:user.uid,addedByName:name(),createdAt:serverTimestamp()})
-   .then(()=>{e.target.reset();$("#add").close()}).catch(fail)};
+$("#add").addEventListener("close",()=>{editId=null});
+F().cover.oninput=e=>pv(e.target.value.trim());
+
+$("#sc").onclick=async()=>{
+  const id=parseApp(F().steam.value),s=$("#ss"),b=$("#sc");
+  if(!id){s.textContent="Bitte einen Steam-Link (…/app/12345/…) oder eine AppID eintragen.";return}
+  b.disabled=true;s.textContent="Suche bei Steam …";
+  try{
+    const r=await steamLookup(id);
+    if(r.name&&!F().title.value.trim())F().title.value=r.name;
+    if(r.cover){F().cover.value=r.cover;pv(r.cover);s.textContent="Cover gefunden ("+r.how+"). Titel und Angaben bitte prüfen."}
+    else s.textContent=r.api?"Zu diesem Spiel gibt es bei Steam kein ladbares Cover. Trage eine Bild-Adresse von Hand ein."
+      :"Steam war nicht erreichbar. Versuche es später noch einmal oder trage die Bild-Adresse von Hand ein."
+  }catch(e){s.textContent="Fehler beim Abruf. Trage die Bild-Adresse von Hand ein."}
+  finally{b.disabled=false}
+};
+F().steam.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("#sc").click()}});
+F().steam.addEventListener("change",()=>{if(parseApp(F().steam.value))$("#sc").click()});
+
+$("#af").onsubmit=async e=>{e.preventDefault();
+  const v=k=>F()[k].value.trim(),b=$("#asv");
+  b.disabled=true;
+  try{
+    const cover=v("cover");
+    if(cover&&!(await probe(cover))&&!confirm("Das Bild unter dieser Adresse lässt sich nicht laden. Trotzdem speichern?"))return;
+    const data={title:v("title"),platform:v("platform"),genre:v("genre"),status:F().status.value,hours:v("hours")?+v("hours"):0,cover,steamId:parseApp(v("steam"))||""};
+    if(editId)await updateDoc(doc(db,"games",editId),data);
+    else await addDoc(collection(db,"games"),{...data,addedBy:user.uid,addedByName:name(),createdAt:serverTimestamp()});
+    $("#add").close();
+  }catch(err){fail(err)}
+  finally{b.disabled=false}
+};
 
 const ok=()=>$("#lg").close(),err=e=>alert((e.code||e.message).replace("auth/",""));
 $("#lc").onclick=ok;
